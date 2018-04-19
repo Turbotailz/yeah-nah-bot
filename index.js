@@ -25,6 +25,7 @@ const submission = client.SubmissionStream(streamOpts);
 
 submission.on('submission', (sub) => {
 	if(sub.domain == 'stuff.co.nz') {
+
 		axios.get(sub.url)
 			.then((response) => {
 				let $ = cheerio.load(response.data);
@@ -32,11 +33,59 @@ submission.on('submission', (sub) => {
 				let turndown = new TurndownService();
 				turndown.remove('script');
 
-				let markdown;
-				markdown = '#Yeah, nah. Don\'t click that link, read the article here\n*****\n';
-				markdown += turndown.turndown($('article.story_landing').html());
+				let markdown = '';
+				let markdown2 = '';
 
-				sub.reply(markdown);
+				markdown = '#Yeah, nah. Don\'t click that link, read the article here\n*****\n';
+				markdown += '#' + $('.story_content_top h1').text().trim() + '\n\n';
+
+				let mdCount = markdown.length;
+
+				$('article.story_landing').children().each(function() {
+					if($(this).is('p')) {
+						if ($(this).text().includes('READ MORE')) {
+						} else {
+							let string = turndown.turndown($(this).html()) + '\n\n';
+							if (mdCount + string.length < 9800 && markdown2.length == 0) {
+								markdown += string;
+								mdCount = markdown.length;
+							} else {
+								markdown2 += string;
+							}
+						}
+					} else if ($(this).is('.landscapephoto')) {
+						let img = $(this).find('img');
+						let string = '[' + img.attr('alt') + '](' + img.attr('src') + ')\n\n';
+						if (mdCount + string.length < 9800 && markdown2.length == 0) {
+							markdown += string;
+							mdCount = markdown.length;
+						} else {
+							markdown2 += string;
+						}
+					}
+				});
+
+				if (markdown2.length > 0) {
+					markdown += '*****\n#Article too long for Reddit comments, continued in thread...\n'
+				}
+
+				markdown += '*****\n^Notice ^any ^bugs? ^Want ^your ^subreddit ^blacklisted? ^Contact ^/u/turbotailz';
+
+				sub.reply(markdown)
+					.then((reply) => {
+						if (markdown2.length > 0) {
+							reply.reply(markdown2)
+								.then((limitReply) => {
+									console.log('Article was too long.')
+								})
+								.catch((error) => {
+									console.log(error);
+								})
+						}
+					})
+					.catch((error) => {
+						console.log(error);
+					})
 			})
 			.catch((error) => {
 				console.log(error);
